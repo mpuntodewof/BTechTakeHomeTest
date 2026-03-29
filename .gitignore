@@ -1,0 +1,54 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.DotSettings.user
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+publish/
+out/
+
+## EF Core Migrations (keep tracked, but ignore local snapshots)
+*.db
+*.db-shm
+*.db-wal
+
+## NuGet
+*.nupkg
+**/packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Node / React
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+
+## IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Logs
+logs/
+*.log
+
+## Secrets
+appsettings.Production.json
