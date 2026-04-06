@@ -2,11 +2,14 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5154';
 
+const MAX_RETRIES = 3;
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 15000,
 });
 
 // Request interceptor: attach Bearer token
@@ -19,6 +22,27 @@ api.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+// Retry interceptor: exponential backoff on network errors and 5xx
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const config = error.config as InternalAxiosRequestConfig & { _retryCount?: number };
+    if (!config) return Promise.reject(error);
+
+    const isNetworkError = !error.response && error.code !== 'ERR_CANCELED';
+    const isServerError = error.response && error.response.status >= 500;
+
+    if ((isNetworkError || isServerError) && (config._retryCount ?? 0) < MAX_RETRIES) {
+      config._retryCount = (config._retryCount ?? 0) + 1;
+      const delay = Math.pow(2, config._retryCount) * 1000; // 2s, 4s, 8s
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return api(config);
+    }
+
+    return Promise.reject(error);
+  }
 );
 
 // Response interceptor: handle 401 with token refresh

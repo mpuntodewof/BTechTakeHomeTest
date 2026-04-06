@@ -4,6 +4,12 @@ namespace AuthAssessment.Application.DTOs.Transactions;
 
 public record TransferRequest
 {
+    /// <summary>
+    /// Client-generated UUID to prevent duplicate transfers on retry.
+    /// If null, the server generates one (backwards compatible).
+    /// </summary>
+    public Guid? IdempotencyKey { get; init; }
+
     [Required, EmailAddress]
     public string RecipientEmail { get; init; } = default!;
 

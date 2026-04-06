@@ -3,6 +3,7 @@ namespace AuthAssessment.Domain.Entities;
 public class Transaction
 {
     public Guid Id { get; set; }
+    public Guid? IdempotencyKey { get; set; }
     public Guid SenderId { get; set; }
     public Guid RecipientId { get; set; }
     public decimal Amount { get; set; }

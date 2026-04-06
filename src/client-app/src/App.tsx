@@ -11,7 +11,9 @@ import {
 } from '@mui/material';
 import { AccountBalanceWallet, LogoutOutlined } from '@mui/icons-material';
 import { AuthProvider } from './context/AuthContext';
+import { NetworkProvider } from './context/NetworkContext';
 import { useAuth } from './hooks/useAuth';
+import OfflineBanner from './components/OfflineBanner';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import LoginPage from './pages/LoginPage';
@@ -79,6 +81,7 @@ function NavBar() {
 function AppRoutes() {
   return (
     <>
+      <OfflineBanner />
       <NavBar />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -105,9 +108,11 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
+        <NetworkProvider>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </NetworkProvider>
       </BrowserRouter>
     </ThemeProvider>
   );

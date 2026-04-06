@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useContext, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -12,9 +12,13 @@ import {
   CircularProgress,
   Container,
   InputAdornment,
+  Chip,
 } from '@mui/material';
-import { SendOutlined } from '@mui/icons-material';
+import { SendOutlined, WifiOff, CloudQueue } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
+import { useOfflineSync } from '../hooks/useOfflineSync';
+import { NetworkContext } from '../context/NetworkContext';
+import { addPendingTransfer } from '../services/offlineQueue';
 import api from '../services/api';
 import { AxiosError } from 'axios';
 
@@ -28,6 +32,8 @@ const formatCurrency = (amount: number): string => {
 export default function TransferPage() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
+  const { isOnline } = useContext(NetworkContext);
+  const { pendingCount, isSyncing } = useOfflineSync(() => refreshUser());
 
   const [recipientEmail, setRecipientEmail] = useState('');
   const [amount, setAmount] = useState('');
@@ -35,6 +41,7 @@ export default function TransferPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     refreshUser();
@@ -45,13 +52,42 @@ export default function TransferPage() {
     setError('');
     setLoading(true);
 
+    const parsedAmount = parseFloat(amount);
+    const idempotencyKey = crypto.randomUUID();
+
+    if (!isOnline) {
+      // OFFLINE: Queue the transfer in IndexedDB
+      try {
+        await addPendingTransfer({
+          id: idempotencyKey,
+          recipientEmail,
+          amount: parsedAmount,
+          notes: notes || undefined,
+        });
+
+        setSuccessMessage('Transfer queued. It will be sent when you are back online.');
+        setSuccessOpen(true);
+        setRecipientEmail('');
+        setAmount('');
+        setNotes('');
+      } catch {
+        setError('Failed to queue transfer offline.');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ONLINE: Send directly with idempotency key
     try {
       await api.post('/api/transactions/transfer', {
+        idempotencyKey,
         recipientEmail,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         notes: notes || undefined,
       });
 
+      setSuccessMessage('Transfer completed successfully!');
       setSuccessOpen(true);
       await refreshUser();
       setRecipientEmail('');
@@ -65,7 +101,7 @@ export default function TransferPage() {
         setError(
           typeof data === 'string'
             ? data
-            : data.message || data.title || 'Transfer failed. Please try again.'
+            : data.error || data.message || data.title || 'Transfer failed. Please try again.'
         );
       } else {
         setError('Transfer failed. Please try again.');
@@ -77,9 +113,22 @@ export default function TransferPage() {
 
   return (
     <Container maxWidth="sm" sx={{ py: 4 }}>
-      <Typography variant="h4" fontWeight="bold" gutterBottom>
-        Transfer Funds
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h4" fontWeight="bold">
+          Transfer Funds
+        </Typography>
+        {!isOnline && (
+          <Chip icon={<WifiOff />} label="Offline" color="warning" size="small" />
+        )}
+        {pendingCount > 0 && (
+          <Chip
+            icon={isSyncing ? <CircularProgress size={16} /> : <CloudQueue />}
+            label={isSyncing ? 'Syncing...' : `${pendingCount} queued`}
+            color="info"
+            size="small"
+          />
+        )}
+      </Box>
 
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ textAlign: 'center' }}>
@@ -89,6 +138,11 @@ export default function TransferPage() {
           <Typography variant="h5" fontWeight="bold" color="primary.main">
             {formatCurrency(user?.balance ?? 0)}
           </Typography>
+          {!isOnline && (
+            <Typography variant="caption" color="text.secondary">
+              Balance may be outdated while offline
+            </Typography>
+          )}
         </CardContent>
       </Card>
 
@@ -97,6 +151,12 @@ export default function TransferPage() {
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
+            </Alert>
+          )}
+
+          {!isOnline && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              You are offline. Your transfer will be queued and sent automatically when the connection returns.
             </Alert>
           )}
 
@@ -157,7 +217,11 @@ export default function TransferPage() {
                   loading ? <CircularProgress size={20} /> : <SendOutlined />
                 }
               >
-                {loading ? 'Sending...' : 'Send Transfer'}
+                {loading
+                  ? 'Sending...'
+                  : isOnline
+                    ? 'Send Transfer'
+                    : 'Queue Transfer'}
               </Button>
             </Box>
           </Box>
@@ -176,7 +240,7 @@ export default function TransferPage() {
           variant="filled"
           sx={{ width: '100%' }}
         >
-          Transfer completed successfully!
+          {successMessage}
         </Alert>
       </Snackbar>
     </Container>

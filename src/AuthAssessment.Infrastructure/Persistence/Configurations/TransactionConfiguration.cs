@@ -26,6 +26,10 @@ public class TransactionConfiguration : IEntityTypeConfiguration<Transaction>
             .HasForeignKey(t => t.RecipientId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasIndex(t => t.IdempotencyKey)
+            .IsUnique()
+            .HasFilter("[IdempotencyKey] IS NOT NULL");
+
         builder.HasIndex(t => t.SenderId);
         builder.HasIndex(t => t.RecipientId);
         builder.HasIndex(t => t.CreatedAt);

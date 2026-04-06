@@ -10,6 +10,9 @@ public sealed class TransactionRepository(AppDbContext context) : ITransactionRe
     public async Task AddAsync(Transaction transaction, CancellationToken ct = default)
         => await context.Transactions.AddAsync(transaction, ct);
 
+    public async Task<bool> ExistsByIdempotencyKeyAsync(Guid idempotencyKey, CancellationToken ct = default)
+        => await context.Transactions.AnyAsync(t => t.IdempotencyKey == idempotencyKey, ct);
+
     public async Task<(List<Transaction> Items, int TotalCount)> GetByUserIdAsync(
         Guid userId, int page, int pageSize, CancellationToken ct = default)
     {

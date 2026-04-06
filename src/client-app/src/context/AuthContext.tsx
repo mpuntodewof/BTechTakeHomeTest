@@ -82,18 +82,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
     if (token) {
-      const userFromToken = extractUserFromToken(token);
-      if (userFromToken) {
-        setUser(userFromToken);
-        // Fetch fresh data from server
-        api
-          .get('/api/users/me')
-          .then((res) => setUser(res.data))
-          .catch(() => {
-            // Token may be expired; let the interceptor handle refresh
-          });
+      // Try cached user first for instant display (especially when offline)
+      const cached = localStorage.getItem('cachedUser');
+      if (cached) {
+        try {
+          const { cachedAt: _, ...cachedUser } = JSON.parse(cached);
+          setUser(cachedUser as UserInfo);
+        } catch { /* ignore corrupt cache */ }
+      } else {
+        const userFromToken = extractUserFromToken(token);
+        if (userFromToken) setUser(userFromToken);
       }
+      // Fetch fresh data from server
+      api
+        .get('/api/users/me')
+        .then((res) => {
+          setUser(res.data);
+          localStorage.setItem('cachedUser', JSON.stringify({
+            ...res.data,
+            cachedAt: Date.now(),
+          }));
+        })
+        .catch(() => {
+          // Offline or token expired — cached user is already displayed
+        });
     }
+  }, []);
+
+  const cacheUser = useCallback((userInfo: UserInfo) => {
+    localStorage.setItem('cachedUser', JSON.stringify({
+      ...userInfo,
+      cachedAt: Date.now(),
+    }));
   }, []);
 
   const login = useCallback(async (data: LoginRequest) => {
@@ -102,7 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     setUser(userInfo);
-  }, []);
+    cacheUser(userInfo);
+  }, [cacheUser]);
 
   const register = useCallback(async (data: RegisterRequest) => {
     const response = await api.post<AuthResponse>('/api/auth/register', data);
@@ -110,7 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     setUser(userInfo);
-  }, []);
+    cacheUser(userInfo);
+  }, [cacheUser]);
 
   const logout = useCallback(async () => {
     try {
@@ -120,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('cachedUser');
     setUser(null);
   }, []);
 
@@ -127,10 +150,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await api.get<UserInfo>('/api/users/me');
       setUser(response.data);
+      cacheUser(response.data);
     } catch {
-      // If fetching user fails, leave current state
+      // If fetching user fails, leave current state (cached data still shown)
     }
-  }, []);
+  }, [cacheUser]);
 
   const isAuthenticated = user !== null;
   const isAdmin = user?.role === 'Admin';

@@ -12,6 +12,13 @@ public sealed class TransactionUseCase(
     public async Task<TransactionResponse> TransferFundAsync(
         Guid senderId, TransferRequest request, CancellationToken ct = default)
     {
+        // Idempotency check: reject duplicate transfers from offline queue retries
+        if (request.IdempotencyKey.HasValue)
+        {
+            if (await transactionRepository.ExistsByIdempotencyKeyAsync(request.IdempotencyKey.Value, ct))
+                throw new InvalidOperationException("This transfer has already been processed.");
+        }
+
         var sender = await userRepository.GetByIdAsync(senderId, ct)
             ?? throw new InvalidOperationException("Sender not found.");
 
@@ -36,6 +43,7 @@ public sealed class TransactionUseCase(
         var transaction = new Transaction
         {
             Id = Guid.NewGuid(),
+            IdempotencyKey = request.IdempotencyKey,
             SenderId = sender.Id,
             RecipientId = recipient.Id,
             Amount = request.Amount,
